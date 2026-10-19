@@ -1,0 +1,77 @@
+#!/bin/bash
+set -u
+
+BAT="/sys/class/power_supply/BAT0"
+
+read_sysfs() {
+    [[ -r "$BAT/$1" ]] && cat "$BAT/$1" || true
+}
+
+# No battery: report external power, without inventing measurements.
+if [[ ! -d "$BAT" ]]; then
+    printf 'WALL: --.--%% @ +--.--W\n'
+    exit 0
+fi
+
+serial=$(read_sysfs serial_number)
+status=$(read_sysfs status)
+energy_now=$(read_sysfs energy_now)
+energy_full=$(read_sysfs energy_full)
+power_now=$(read_sysfs power_now)
+
+case "$serial" in
+    51748) label="ALPH" ;;
+    48131) label="BRAV" ;;
+    30586) label="CHAR" ;;
+    37536) label="DELT" ;;
+    32053) label="ECHO" ;;
+    *)     label="????" ;;
+esac
+
+# Battery percentage: prefer energy values, then capacity.
+percentage="--.--"
+
+if [[ "$energy_now" =~ ^[0-9]+$ &&
+      "$energy_full" =~ ^[0-9]+$ ]] &&
+   (( energy_full > 0 )); then
+    percentage=$(awk -v n="$energy_now" -v f="$energy_full" '
+        BEGIN {
+            p = n / f * 100
+            if (p > 100) p = 100
+            printf "%.2f", p
+        }
+    ')
+else
+    capacity=$(read_sysfs capacity)
+    if [[ "$capacity" =~ ^[0-9]+$ ]]; then
+        percentage=$(awk -v p="$capacity" '
+            BEGIN {
+                if (p > 100) p = 100
+                printf "%.2f", p
+            }
+        ')
+    fi
+fi
+
+# Power in watts; retain unknown values as placeholders.
+watts="--.--"
+
+if [[ "$power_now" =~ ^[0-9]+$ ]]; then
+    watts=$(awk -v p="$power_now" \
+        'BEGIN { printf "%.2f", p / 1000000 }')
+else
+    current=$(read_sysfs current_now)
+    voltage=$(read_sysfs voltage_now)
+
+    if [[ "$current" =~ ^[0-9]+$ &&
+          "$voltage" =~ ^[0-9]+$ ]]; then
+        watts=$(awk -v c="$current" -v v="$voltage" \
+            'BEGIN { printf "%.2f", c * v / 1000000000000 }')
+    fi
+fi
+
+# + by default; use - while discharging.
+sign="-"
+[[ "$status" == "Discharging" ]] || sign="+"
+
+printf '%s: %s%% @ %s%sW\n' "$label" "$percentage" "$sign" "$watts"

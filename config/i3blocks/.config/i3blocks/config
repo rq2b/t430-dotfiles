@@ -1,7 +1,7 @@
 interval=5
 
 [battery]
-command=/home/rq2b/.local/bin/t430-battery-status
+command=/home/rq2b/.local/bin/battery-block
 interval=5
 
 [cpu]
