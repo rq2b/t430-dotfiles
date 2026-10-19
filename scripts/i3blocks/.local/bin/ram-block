@@ -1,0 +1,2 @@
+#!/bin/sh
+free -b | awk '/^Mem:/ {printf "RAM: %.1fG\n", $3/1e9}'
