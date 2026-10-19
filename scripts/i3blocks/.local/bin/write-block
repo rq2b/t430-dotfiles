@@ -1,0 +1,38 @@
+#!/bin/sh
+
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/i3blocks-io/write"
+mkdir -p "${cache%/*}" || exit 1
+
+source=$(findmnt -nro SOURCE --target / 2>/dev/null)
+device=$(lsblk -sno NAME,TYPE "$source" 2>/dev/null |
+    awk '$2 == "disk" { gsub(/[^[:alnum:]_+-]/, "", $1); print $1; exit }')
+
+if [ -z "$device" ] || [ ! -r "/sys/class/block/$device/stat" ]; then
+    printf 'WRITE: -.- MB/s\n'
+    exit 0
+fi
+
+sectors=$(awk '{print $7}' "/sys/class/block/$device/stat")
+now=$(date +%s)
+label=$(printf '%s' "$device" | tr '[:lower:]' '[:upper:]')
+rate="-.-"
+
+if [ -r "$cache" ]; then
+    read -r old_device old_sectors old_time < "$cache"
+
+    case "${old_sectors:-}:${old_time:-}" in
+        *[!0-9:]*|:*) ;;
+        *)
+            if [ "$device" = "${old_device:-}" ]; then
+                elapsed=$((now - old_time))
+                if [ "$elapsed" -gt 0 ] && [ "$sectors" -ge "$old_sectors" ]; then
+                    rate=$(awk -v d="$((sectors - old_sectors))" -v t="$elapsed" \
+                        'BEGIN { printf "%.1f", d * 512 / t / 1000000 }')
+                fi
+            fi
+            ;;
+    esac
+fi
+
+printf '%s %s %s\n' "$device" "$sectors" "$now" > "$cache"
+printf '%s W: %s MB/s\n' "$label" "$rate"
