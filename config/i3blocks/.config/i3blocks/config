@@ -16,7 +16,7 @@ interval=5
 command=free -b | awk '/^Mem:/ {printf "RAM: %.1fG\n", $3/1000000000, $2/1000000000}'
 
 [language]
-command=~/.local/bin/language
+command=~/.local/bin/language-block
 interval=once
 signal=5
 
