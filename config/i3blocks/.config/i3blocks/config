@@ -13,11 +13,6 @@ command=~/.local/bin/language-block
 interval=once
 signal=5
 
-[date]
-command=~/.local/bin/date-block
-interval=once
-signal=6
-
 [time]
 command=~/.local/bin/time-block
 interval=5
