@@ -19,5 +19,5 @@ interval=once
 signal=6
 
 [time]
-command=date '+%Y-%m-%d %H:%M:%S '
+command=~/.local/bin/time-block
 interval=5

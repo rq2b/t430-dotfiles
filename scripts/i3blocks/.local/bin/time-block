@@ -1,0 +1,4 @@
+#!/bin/sh
+now=$(date '+%Y-%m-%d @ %H:%M:%S')
+seconds=${now##*:}
+printf '%s%02d \n' "${now%:*}:" "$((seconds / 5 * 5))"
