@@ -5,7 +5,7 @@ command=/home/rq2b/.local/bin/t430-battery-status
 interval=5
 
 [cpu]
-command=/home/rq2b/.local/bin/i3blocks-cpu
+command=/home/rq2b/.local/bin/cpu-block
 interval=5
 
 [language]

@@ -1,0 +1,82 @@
+#!/bin/sh
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/i3blocks/cpu-block"
+mkdir -p "${state%/*}" || exit 1
+
+usage="--.--"
+
+set -- $(awk '/^cpu / {
+    total = $2+$3+$4+$5+$6+$7+$8+$9
+    busy = total-$5-$6
+    print busy, total
+    exit
+}' /proc/stat)
+
+busy=${1:-}
+total=${2:-}
+
+if [ -n "$busy" ] && [ -n "$total" ]; then
+    if [ -r "$state" ]; then
+        read -r old_busy old_total < "$state"
+
+        case "$old_busy:$old_total" in
+            *[!0-9:]*|:*) ;;
+            *)
+                db=$((busy-old_busy))
+                dt=$((total-old_total))
+
+                if [ "$dt" -gt 0 ] && [ "$db" -ge 0 ]; then
+                    usage=$(awk -v b="$db" -v t="$dt" '
+                        BEGIN {
+                            p = 100*b/t
+                            if (p > 99.99) p = 99.99
+                            printf "%05.2f", p
+                        }
+                    ')
+                fi
+                ;;
+        esac
+    fi
+
+    printf '%s %s\n' "$busy" "$total" > "$state"
+fi
+
+temp_sum=0
+temp_count=0
+
+for hwmon in /sys/class/hwmon/hwmon*; do
+    [ -r "$hwmon/name" ] || continue
+    [ "$(cat "$hwmon/name")" = "coretemp" ] || continue
+
+    for label_file in "$hwmon"/temp*_label; do
+        [ -r "$label_file" ] || continue
+
+        case "$(cat "$label_file")" in
+            "Core "*)
+                input_file="${label_file%_label}_input"
+                [ -r "$input_file" ] || continue
+
+                temp=$(cat "$input_file")
+
+                case "$temp" in
+                    ''|*[!0-9]*) continue ;;
+                esac
+
+                temp_sum=$((temp_sum + temp))
+                temp_count=$((temp_count + 1))
+                ;;
+        esac
+    done
+done
+
+temperature="--"
+
+if [ "$temp_count" -gt 0 ]; then
+    temperature=$(awk -v s="$temp_sum" -v n="$temp_count" '
+        BEGIN {
+            printf "%02.0f", s/n/1000
+        }
+    ')
+fi
+
+printf 'CPU: %s%% @ %s°C\n' "$usage" "$temperature"
