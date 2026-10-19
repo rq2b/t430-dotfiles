@@ -1,4 +1,7 @@
 #!/bin/sh
-now=$(date '+%Y-%m-%d @ %H:%M:%S')
+
+now=$(date '+%Y-%m-%d @ %H:%M:%S') || exit 1
 seconds=${now##*:}
-printf '%s%02d \n' "${now%:*}:" "$((seconds / 5 * 5))"
+rounded=$(awk -v s="$seconds" 'BEGIN { printf "%02d", int(s / 5) * 5 }')
+
+printf '%s%02d \n' "${now%:*}:" "$rounded"
