@@ -1,0 +1,48 @@
+#!/bin/bash
+set -u
+
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/i3blocks-network"
+mkdir -p "$CACHE" || exit 1
+
+iface=$(ip route show default 2>/dev/null | awk '
+    NR == 1 {
+        for (i = 1; i <= NF; i++)
+            if ($i == "dev") { print $(i+1); exit }
+    }
+')
+
+if [[ -z "$iface" || ! -r "/sys/class/net/$iface/statistics/rx_bytes" ]]; then
+    echo "RX: -.- KB/s"
+    exit 0
+fi
+
+rx=$(cat "/sys/class/net/$iface/statistics/rx_bytes") || {
+    echo "RX: -.- KB/s"
+    exit 0
+}
+
+cache="$CACHE/rx"
+now=$(date +%s)
+
+if [[ -r "$cache" ]]; then
+    read -r old_iface old_rx old_time < "$cache" || true
+
+    if [[ "${old_iface:-}" == "$iface" &&
+          "${old_rx:-}" =~ ^[0-9]+$ &&
+          "${old_time:-}" =~ ^[0-9]+$ ]]; then
+        elapsed=$((now - old_time))
+
+        if (( elapsed > 0 && rx >= old_rx )); then
+            awk -v bytes="$((rx - old_rx))" -v t="$elapsed" \
+                'BEGIN { printf "RX: %.1f KB/s\n", bytes/t/1000 }'
+        else
+            echo "RX: -.- KB/s"
+        fi
+    else
+        echo "RX: -.- KB/s"
+    fi
+else
+    echo "RX: -.- KB/s"
+fi
+
+printf '%s %s %s\n' "$iface" "$rx" "$now" > "$cache"
