@@ -1,0 +1,10 @@
+#!/bin/sh
+
+setxkbmap -layout us,ru,ua -option '' \
+    -symbols 'pc+us+ru:2+ua:3+inet(evdev)+langselect(selectors)' \
+    || exit 1
+
+xkb-switch -W |
+while IFS= read -r layout; do
+    pkill -SIGRTMIN+5 -x i3blocks
+done
