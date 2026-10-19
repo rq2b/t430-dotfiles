@@ -247,3 +247,5 @@ bindsym $mod+Shift+v exec --no-startup-id flatpak run com.github.hluk.copyq togg
 # Language
 exec --no-startup-id ~/.local/bin/language-init
 
+# Date
+exec --no-startup-id ~/.local/bin/date-block-watch

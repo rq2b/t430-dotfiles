@@ -1,0 +1,2 @@
+#!/bin/sh
+LC_ALL=C date '+%a @ W%V' | tr '[:lower:]' '[:upper:]'

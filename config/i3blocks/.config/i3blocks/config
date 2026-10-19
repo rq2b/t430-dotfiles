@@ -13,6 +13,11 @@ command=~/.local/bin/language-block
 interval=once
 signal=5
 
+[date]
+command=~/.local/bin/date-block
+interval=once
+signal=6
+
 [time]
 command=date '+%Y-%m-%d %H:%M:%S '
 interval=5

@@ -1,0 +1,23 @@
+#!/bin/bash
+set -u
+
+while true; do
+    now=$(date +%s) || { sleep 1; continue; }
+    next_midnight=$(date -d 'tomorrow 00:00:00' +%s) || {
+        sleep 1
+        continue
+    }
+
+    remaining=$((next_midnight - now))
+
+    if (( remaining <= 120 )); then
+        if (( remaining <= 0 )); then
+            pkill -RTMIN+4 -x i3blocks 2>/dev/null || true
+            sleep 60
+        else
+            sleep 1
+        fi
+    else
+        sleep 60
+    fi
+done
