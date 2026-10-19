@@ -1,9 +1,5 @@
 interval=5
 
-[wifi]
-command=/home/rq2b/.local/bin/i3blocks-network
-interval=5
-
 [battery]
 command=/home/rq2b/.local/bin/t430-battery-status
 interval=5
@@ -11,9 +7,6 @@ interval=5
 [cpu]
 command=/home/rq2b/.local/bin/i3blocks-cpu
 interval=5
-
-[memory]
-command=free -b | awk '/^Mem:/ {printf "RAM: %.1fG\n", $3/1000000000, $2/1000000000}'
 
 [language]
 command=~/.local/bin/language-block
