@@ -11,26 +11,3 @@ general {
         interval = 5
 }
 
-order += "wireless _first_"
-order += "battery all"
-order += "disk /"
-order += "cpu_usage"
-order += "memory"
-order += "tztime local"
-
-wireless _first_ {
-        format_up = "Wi-Fi:%quality"
-        format_down = "Wi-Fi: down"
-}
-
-cpu_usage {
-	format = "CPU: %usage"
-}
-
-memory {
-        format = "RAM: %used"
-}
-
-tztime local {
-        format = "%Y-%m-%d %H:%M:%S "
-}
