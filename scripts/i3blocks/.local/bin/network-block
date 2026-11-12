@@ -1,0 +1,102 @@
+#!/bin/sh
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/i3blocks-network"
+RX_CACHE="$CACHE_DIR/rx"
+TX_CACHE="$CACHE_DIR/tx"
+MISSING='NET: --.-- / --.-- KB/s'
+MBPS_THRESHOLD_KB=99.995
+
+
+sample_rate() {
+    cache=$1
+    counter=$2
+    rate=
+    old_iface=
+    old_counter=
+    old_time=
+
+    if [ -r "$cache" ]; then
+        read -r old_iface old_counter old_time < "$cache" || :
+    fi
+
+    case "$old_counter:$old_time" in
+        *[!0-9:]*|:*|*:) ;;
+        *)
+            if [ "$old_iface" = "$iface" ] &&
+               [ "$now" -gt "$old_time" ] &&
+               [ "$counter" -ge "$old_counter" ]; then
+                rate=$(awk \
+                    -v delta="$((counter - old_counter))" \
+                    -v elapsed="$((now - old_time))" \
+                    'BEGIN { printf "%.6f", delta * 1000000000 / elapsed / 1000 }')
+            fi
+            ;;
+    esac
+
+    printf '%s %s %s\n' "$iface" "$counter" "$now" > "$cache" 2>/dev/null
+    printf '%s\n' "$rate"
+}
+
+
+if ! mkdir -p "$CACHE_DIR" 2>/dev/null; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
+
+
+iface=$(ip route show default 2>/dev/null | awk '
+    NR == 1 {
+        for (i = 1; i <= NF; i++)
+            if ($i == "dev") { print $(i+1); exit }
+    }
+')
+
+if [ -z "$iface" ] ||
+   [ ! -r "/sys/class/net/$iface/statistics/rx_bytes" ] ||
+   [ ! -r "/sys/class/net/$iface/statistics/tx_bytes" ]; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
+
+
+rx=$(cat "/sys/class/net/$iface/statistics/rx_bytes") || rx=
+tx=$(cat "/sys/class/net/$iface/statistics/tx_bytes") || tx=
+
+case "$rx:$tx" in
+    *[!0-9:]*|:*|*:)
+        printf '%s\n' "$MISSING"
+        exit 0
+        ;;
+esac
+
+
+now=$(date +%s%N 2>/dev/null) || now=
+
+case "$now" in
+    ''|*[!0-9]*)
+        printf '%s\n' "$MISSING"
+        exit 0
+        ;;
+esac
+
+
+rx_rate=$(sample_rate "$RX_CACHE" "$rx")
+tx_rate=$(sample_rate "$TX_CACHE" "$tx")
+
+
+awk -v rx="$rx_rate" -v tx="$tx_rate" -v threshold="$MBPS_THRESHOLD_KB" 'BEGIN {
+    valid_rx = (rx != "")
+    valid_tx = (tx != "")
+    megabytes = (valid_rx && rx >= threshold) || (valid_tx && tx >= threshold)
+    unit = megabytes ? "MB/s" : "KB/s"
+
+    if (megabytes) {
+        if (valid_rx) rx /= 1000
+        if (valid_tx) tx /= 1000
+    }
+
+    rx_text = valid_rx ? sprintf("%05.2f", rx) : "--.--"
+    tx_text = valid_tx ? sprintf("%05.2f", tx) : "--.--"
+
+    printf "NET: %s / %s %s\n", rx_text, tx_text, unit
+}'

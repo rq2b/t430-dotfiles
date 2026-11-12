@@ -1,0 +1,93 @@
+#!/bin/sh
+
+TARGET="/"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/i3blocks-io"
+READ_CACHE="$CACHE_DIR/read"
+WRITE_CACHE="$CACHE_DIR/write"
+SECTOR_BYTES=512
+MISSING='IO: -.- / -.- MB/s'
+
+
+sample_rate() {
+    cache=$1
+    sectors=$2
+    rate='-.-'
+    old_device=
+    old_sectors=
+    old_time=
+
+    if [ -r "$cache" ]; then
+        read -r old_device old_sectors old_time < "$cache" || :
+    fi
+
+    case "$old_sectors" in
+        ''|*[!0-9]*) ;;
+        *)
+            case "$old_time" in
+                ''|*[!0-9]*) ;;
+                *)
+                    if [ "$old_device" = "$device" ] &&
+                       [ "$now" -gt "$old_time" ] &&
+                       [ "$sectors" -ge "$old_sectors" ]; then
+                        rate=$(awk \
+                            -v delta="$((sectors - old_sectors))" \
+                            -v elapsed="$((now - old_time))" \
+                            -v sector_bytes="$SECTOR_BYTES" \
+                            'BEGIN { printf "%.1f", delta * sector_bytes / elapsed / 1000000 }')
+                    fi
+                    ;;
+            esac
+            ;;
+    esac
+
+    printf '%s %s %s\n' "$device" "$sectors" "$now" > "$cache" 2>/dev/null
+    printf '%s\n' "$rate"
+}
+
+
+source=$(findmnt -nro SOURCE --target "$TARGET" 2>/dev/null) || source=
+source=${source%%\[*}
+
+device=$(lsblk -sno NAME,TYPE "$source" 2>/dev/null |
+    awk '$2 == "disk" { gsub(/[^[:alnum:]_+-]/, "", $1); print $1; exit }')
+
+if [ -z "$device" ] || [ ! -r "/sys/class/block/$device/stat" ]; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
+
+
+stats=$(awk '{ print $3, $7 }' "/sys/class/block/$device/stat" 2>/dev/null) || stats=
+
+IFS=' ' read -r read_sectors write_sectors <<EOF_STATS
+$stats
+EOF_STATS
+
+case "$read_sectors:$write_sectors" in
+    *[!0-9:]*|:*|*:)
+        printf '%s\n' "$MISSING"
+        exit 0
+        ;;
+esac
+
+
+now=$(date +%s 2>/dev/null) || now=
+
+case "$now" in
+    ''|*[!0-9]*)
+        printf '%s\n' "$MISSING"
+        exit 0
+        ;;
+esac
+
+
+if ! mkdir -p "$CACHE_DIR" 2>/dev/null; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
+
+
+read_rate=$(sample_rate "$READ_CACHE" "$read_sectors")
+write_rate=$(sample_rate "$WRITE_CACHE" "$write_sectors")
+
+printf 'IO: %s / %s MB/s\n' "$read_rate" "$write_rate"
