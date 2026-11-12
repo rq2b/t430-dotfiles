@@ -1,0 +1,41 @@
+
+#!/bin/sh
+
+cache="$HOME/.cache/i3blocks/pwr"
+lock="$HOME/.cache/i3blocks/pwr.lock"
+
+mkdir -p "$HOME/.cache/i3blocks"
+
+# Display the last successful reading.
+if [ -f "$cache" ]; then
+    IFS= read -r state < "$cache"
+else
+    state="-"
+fi
+
+case "$state" in
+    0) state="N" ;;
+    1) state="Y" ;;
+    *) state="-" ;;
+esac
+
+printf 'PWR: %s\n' "$state"
+
+# Refresh the cache asynchronously.
+(
+    if ! mkdir "$lock" 2>/dev/null; then
+        exit 0
+    fi
+
+    trap 'rmdir "$lock"' EXIT HUP INT TERM
+
+    result=$(ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        ipad '~/power-status' 2>/dev/null)
+
+    case "$result" in
+        0|1)
+            printf '%s\n' "$result" > "$cache.tmp.$$" &&
+                mv "$cache.tmp.$$" "$cache"
+            ;;
+    esac
+) >/dev/null 2>&1 &

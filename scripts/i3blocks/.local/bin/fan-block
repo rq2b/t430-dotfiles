@@ -1,0 +1,64 @@
+
+#!/bin/sh
+
+# ThinkPad T430 fan monitor
+# Dynamically calibrated RPM-to-percentage mapping.
+
+FAN="/sys/class/hwmon/hwmon3/fan1_input"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/fan-block/range"
+
+# Unavailable or invalid readings
+[ -r "$FAN" ] || {
+    printf 'FAN: --%%\n'
+    exit 0
+}
+
+rpm=$(cat "$FAN" 2>/dev/null)
+
+case "$rpm" in
+    ''|*[!0-9]*)
+        printf 'FAN: --%%\n'
+        exit 0
+        ;;
+esac
+
+# A stopped fan has no meaningful operating percentage.
+[ "$rpm" -gt 0 ] || {
+    printf 'FAN: --%%\n'
+    exit 0
+}
+
+mkdir -p "$(dirname "$CACHE")" || {
+    printf 'FAN: --%%\n'
+    exit 0
+}
+
+# Initialize calibration.
+if [ ! -s "$CACHE" ]; then
+    printf '%s %s\n' "$rpm" "$rpm" > "$CACHE"
+fi
+
+read min max < "$CACHE"
+
+# Validate cache.
+case "$min:$max" in
+    *[!0-9:]*|'':*|*:'')
+        min=$rpm
+        max=$rpm
+        ;;
+esac
+
+# Expand observed operating range.
+[ "$rpm" -lt "$min" ] && min=$rpm
+[ "$rpm" -gt "$max" ] && max=$rpm
+
+printf '%s %s\n' "$min" "$max" > "$CACHE"
+
+# Calculate percentage.
+if [ "$max" -le "$min" ]; then
+    percentage=0
+else
+    percentage=$(( (rpm - min) * 99 / (max - min) ))
+fi
+
+printf 'FAN: %02d%%\n' "$percentage"

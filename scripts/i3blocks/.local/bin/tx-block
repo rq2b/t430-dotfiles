@@ -1,8 +1,10 @@
-#!/bin/bash
-set -u
+#!/bin/sh
 
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/i3blocks-network"
-mkdir -p "$CACHE" || exit 1
+mkdir -p "$CACHE" || {
+    echo "TX: --- KB/s"
+    exit 0
+}
 
 iface=$(ip route show default 2>/dev/null | awk '
     NR == 1 {
@@ -11,38 +13,60 @@ iface=$(ip route show default 2>/dev/null | awk '
     }
 ')
 
-if [[ -z "$iface" || ! -r "/sys/class/net/$iface/statistics/tx_bytes" ]]; then
-    echo "TX: -.- KB/s"
+if [ -z "$iface" ] || [ ! -r "/sys/class/net/$iface/statistics/tx_bytes" ]; then
+    echo "TX: --- KB/s"
     exit 0
 fi
 
 tx=$(cat "/sys/class/net/$iface/statistics/tx_bytes") || {
-    echo "TX: -.- KB/s"
+    echo "TX: --- KB/s"
     exit 0
 }
 
+case "$tx" in
+    ''|*[!0-9]*)
+        echo "TX: --- KB/s"
+        exit 0
+        ;;
+esac
+
 cache="$CACHE/tx"
-now=$(date +%s)
+now=$(date +%s%N)
 
-if [[ -r "$cache" ]]; then
-    read -r old_iface old_tx old_time < "$cache" || true
+if [ -r "$cache" ]; then
+    read -r old_iface old_tx old_time < "$cache"
 
-    if [[ "${old_iface:-}" == "$iface" &&
-          "${old_tx:-}" =~ ^[0-9]+$ &&
-          "${old_time:-}" =~ ^[0-9]+$ ]]; then
+    case "$old_tx:$old_time" in
+        *[!0-9:]*|:*|*:)
+            old_iface=""
+            ;;
+    esac
+
+    if [ "$old_iface" = "$iface" ] &&
+       [ -n "$old_tx" ] &&
+       [ -n "$old_time" ]; then
+
         elapsed=$((now - old_time))
 
-        if (( elapsed > 0 && tx >= old_tx )); then
-            awk -v bytes="$((tx - old_tx))" -v t="$elapsed" \
-                'BEGIN { printf "TX: %.1f KB/s\n", bytes/t/1000 }'
+        if [ "$elapsed" -gt 0 ] && [ "$tx" -ge "$old_tx" ]; then
+            awk -v bytes="$((tx - old_tx))" -v elapsed="$elapsed" '
+                BEGIN {
+                    speed = bytes * 1000000000 / elapsed / 1000
+
+                    if (speed >= 1000)
+                        printf "TX: %03d MB/s\n", int(speed / 1000 + 0.5)
+                    else
+                        printf "TX: %03d KB/s\n", int(speed + 0.5)
+                }
+            '
         else
-            echo "TX: -.- KB/s"
+            echo "TX: --- KB/s"
         fi
     else
-        echo "TX: -.- KB/s"
+        echo "TX: --- KB/s"
     fi
 else
-    echo "TX: -.- KB/s"
+    echo "TX: --- KB/s"
 fi
 
 printf '%s %s %s\n' "$iface" "$tx" "$now" > "$cache"
