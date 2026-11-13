@@ -1,64 +1,62 @@
-
 #!/bin/sh
 
-# ThinkPad T430 fan monitor
-# Dynamically calibrated RPM-to-percentage mapping.
+HWMON="/sys/class/hwmon/hwmon3"
+FAN="$HWMON/fan1_input"
+PWM_ENABLE="$HWMON/pwm1_enable"
+MIN_RPM=2573
+MAX_RPM=5347
+MISSING='FAN: --%'
 
-FAN="/sys/class/hwmon/hwmon3/fan1_input"
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/fan-block/range"
 
-# Unavailable or invalid readings
-[ -r "$FAN" ] || {
-    printf 'FAN: --%%\n'
+if [ ! -r "$FAN" ] || [ ! -r "$PWM_ENABLE" ]; then
+    printf '%s\n' "$MISSING"
     exit 0
-}
+fi
 
-rpm=$(cat "$FAN" 2>/dev/null)
+if ! IFS= read -r rpm < "$FAN"; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
+
+if ! IFS= read -r pwm_enable < "$PWM_ENABLE"; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
 
 case "$rpm" in
     ''|*[!0-9]*)
-        printf 'FAN: --%%\n'
+        printf '%s\n' "$MISSING"
         exit 0
         ;;
 esac
 
-# A stopped fan has no meaningful operating percentage.
-[ "$rpm" -gt 0 ] || {
-    printf 'FAN: --%%\n'
-    exit 0
-}
-
-mkdir -p "$(dirname "$CACHE")" || {
-    printf 'FAN: --%%\n'
-    exit 0
-}
-
-# Initialize calibration.
-if [ ! -s "$CACHE" ]; then
-    printf '%s %s\n' "$rpm" "$rpm" > "$CACHE"
-fi
-
-read min max < "$CACHE"
-
-# Validate cache.
-case "$min:$max" in
-    *[!0-9:]*|'':*|*:'')
-        min=$rpm
-        max=$rpm
+case "$pwm_enable" in
+    0|1|2) ;;
+    *)
+        printf '%s\n' "$MISSING"
+        exit 0
         ;;
 esac
 
-# Expand observed operating range.
-[ "$rpm" -lt "$min" ] && min=$rpm
-[ "$rpm" -gt "$max" ] && max=$rpm
+if [ "${#rpm}" -gt 5 ]; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
 
-printf '%s %s\n' "$min" "$max" > "$CACHE"
+if [ "$rpm" -eq 65535 ] && [ "$pwm_enable" -ne 0 ]; then
+    printf '%s\n' "$MISSING"
+    exit 0
+fi
 
-# Calculate percentage.
-if [ "$max" -le "$min" ]; then
+if [ "$rpm" -eq 0 ]; then
     percentage=0
+elif [ "$pwm_enable" -eq 0 ]; then
+    percentage=99
 else
-    percentage=$(( (rpm - min) * 99 / (max - min) ))
+    [ "$rpm" -ge "$MIN_RPM" ] || rpm=$MIN_RPM
+    [ "$rpm" -le "$MAX_RPM" ] || rpm=$MAX_RPM
+
+    percentage=$((1 + (rpm - MIN_RPM) * 97 / (MAX_RPM - MIN_RPM)))
 fi
 
 printf 'FAN: %02d%%\n' "$percentage"

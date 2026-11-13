@@ -10,9 +10,8 @@ awk -v label="$LABEL" -v bytes_per_gb="$BYTES_PER_GB" '
     NR == 2 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
         used_gb = int($1 / bytes_per_gb + 0.5)
         total_gb = int($2 / bytes_per_gb + 0.5)
-        width = length(sprintf("%.0f", total_gb))
 
-        printf "%s: %.0fG @ %0*dG\n", label, total_gb, width, used_gb
+        printf "%s: %.0fG @ %dG\n", label, total_gb, used_gb
         found = 1
     }
 

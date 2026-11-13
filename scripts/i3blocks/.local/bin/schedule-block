@@ -1,0 +1,107 @@
+#!/bin/sh
+
+SCHEDULE="$HOME/repos/relative-clock-settings/schedule.json"
+WEEK_MINUTES=10080
+DAY_MINUTES=1440
+TARGET_MINUTE=1380
+
+[ -r "$SCHEDULE" ] || exit 1
+command -v jq >/dev/null 2>&1 || exit 1
+
+clock=$(date '+%u %-H %-M %-S') || exit 1
+IFS=" " read -r weekday hour minute second <<EOF_CLOCK
+$clock
+EOF_CLOCK
+second=$((second / 5 * 5))
+
+now_week_minute=$(((weekday - 1) * DAY_MINUTES + hour * 60 + minute))
+minute_of_day=$((hour * 60 + minute))
+window_minutes=$(((TARGET_MINUTE - minute_of_day + DAY_MINUTES) % DAY_MINUTES))
+[ "$window_minutes" -ne 0 ] || window_minutes=$DAY_MINUTES
+
+entries=$(jq -r '
+    def minute:
+        if type != "string" then -1
+        else
+            split(":") as $parts
+            | if ($parts | length) != 2 then -1
+              else
+                  (try ($parts[0] | tonumber) catch -1) as $hour
+                  | (try ($parts[1] | tonumber) catch -1) as $minute
+                  | if $hour >= 0 and $hour <= 23 and $minute >= 0 and $minute <= 59
+                    then $hour * 60 + $minute
+                    else -1
+                    end
+              end
+        end;
+
+    if (.days | type) == "object" then .days
+    else error("schedule.days must be an object")
+    end
+    | to_entries[]
+    | .key as $day
+    | (["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] | index($day)) as $day_index
+    | select($day_index != null)
+    | .value[]?
+    | select(type == "object")
+    | (.start | minute) as $start
+    | (.end | minute) as $end
+    | (.name | if type == "string" then gsub("^\\s+|\\s+$"; "") else "" end) as $name
+    | select($start >= 0 and $end > $start and $name != "")
+    | [$day_index, $start, $end, $name]
+    | @tsv
+' "$SCHEDULE") || exit 1
+
+current_name=
+current_remaining=
+next_name=
+next_remaining=
+
+while IFS="$(printf '\t')" read -r day_index start_minute end_minute name; do
+    [ -n "$day_index" ] || continue
+
+    start_week_minute=$((day_index * DAY_MINUTES + start_minute))
+    since_start=$(((now_week_minute - start_week_minute + WEEK_MINUTES) % WEEK_MINUTES))
+
+    if [ "$since_start" -lt "$((end_minute - start_minute))" ]; then
+        if [ -z "$current_name" ]; then
+            current_name=$name
+            current_remaining=$(((end_minute - start_minute - since_start) * 60 - second))
+        fi
+    else
+        until_start=$(((start_week_minute - now_week_minute + WEEK_MINUTES) % WEEK_MINUTES))
+        if [ "$until_start" -gt 0 ] && [ "$until_start" -lt "$window_minutes" ]; then
+            remaining=$((until_start * 60 - second))
+            if [ -z "$next_remaining" ] || [ "$remaining" -lt "$next_remaining" ]; then
+                next_name=$name
+                next_remaining=$remaining
+            fi
+        fi
+    fi
+done <<EOF_ENTRIES
+$entries
+EOF_ENTRIES
+
+if [ -n "$current_name" ]; then
+    activity=$current_name
+    remaining=$current_remaining
+    prefix=
+    suffix=' left'
+elif [ -n "$next_name" ]; then
+    activity=$next_name
+    remaining=$next_remaining
+    prefix='in '
+    suffix=
+else
+    exit 0
+fi
+
+hours=$((remaining / 3600))
+minutes=$(((remaining % 3600) / 60))
+seconds=$((remaining % 60))
+
+if [ "$hours" -gt 0 ]; then
+    printf '%s: %s%02dh %02dm %02ds%s\n' "$activity" "$prefix" "$hours" "$minutes" "$seconds" "$suffix"
+else
+    printf '%s: %s%dm %02ds%s\n' "$activity" "$prefix" "$minutes" "$seconds" "$suffix"
+fi
