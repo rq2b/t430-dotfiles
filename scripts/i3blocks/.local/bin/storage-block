@@ -11,7 +11,7 @@ awk -v label="$LABEL" -v bytes_per_gb="$BYTES_PER_GB" '
         used_gb = int($1 / bytes_per_gb + 0.5)
         total_gb = int($2 / bytes_per_gb + 0.5)
 
-        printf "%s: %.0fG @ %dG\n", label, total_gb, used_gb
+        printf "%s: %.0fG / %dG\n", label, used_gb, total_gb
         found = 1
     }
 

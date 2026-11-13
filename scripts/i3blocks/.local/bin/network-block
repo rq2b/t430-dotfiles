@@ -98,5 +98,5 @@ awk -v rx="$rx_rate" -v tx="$tx_rate" -v threshold="$MBPS_THRESHOLD_KB" 'BEGIN {
     rx_text = valid_rx ? sprintf("%05.2f", rx) : "--.--"
     tx_text = valid_tx ? sprintf("%05.2f", tx) : "--.--"
 
-    printf "NET: %s / %s %s\n", rx_text, tx_text, unit
+    printf "RX: %s / TX: %s %s\n", rx_text, tx_text, unit
 }'

@@ -92,4 +92,4 @@ fi
 read_rate=$(sample_rate "$READ_CACHE" "$read_sectors")
 write_rate=$(sample_rate "$WRITE_CACHE" "$write_sectors")
 
-printf 'IO: %s / %s MB/s\n' "$read_rate" "$write_rate"
+printf 'SDA R: %s / W: %s MB/s\n' "$read_rate" "$write_rate"
